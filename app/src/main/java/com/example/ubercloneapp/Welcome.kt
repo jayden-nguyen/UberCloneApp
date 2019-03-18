@@ -10,11 +10,14 @@ import android.os.Handler
 import android.os.SystemClock
 import android.support.design.widget.Snackbar
 import android.support.v4.app.ActivityCompat
+import android.util.Log
 import android.view.animation.LinearInterpolator
+import android.widget.Toast
 import com.firebase.geofire.GeoFire
 import com.firebase.geofire.GeoLocation
 import com.github.glomadrian.materialanimatedswitch.MaterialAnimatedSwitch
 import com.google.android.gms.common.ConnectionResult
+import com.google.android.gms.common.GooglePlayServicesUtil
 import com.google.android.gms.common.api.GoogleApiClient
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationServices
@@ -29,6 +32,7 @@ import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DatabaseReference
+import com.google.firebase.database.FirebaseDatabase
 import kotlinx.android.synthetic.main.activity_welcome2.*
 
 class Welcome : AppCompatActivity(), OnMapReadyCallback, GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener, com.google.android.gms.location.LocationListener{
@@ -41,6 +45,9 @@ class Welcome : AppCompatActivity(), OnMapReadyCallback, GoogleApiClient.Connect
     val UPATE_INTERVAL = 5000
     val FATEST_INTERVAL = 3000
     val DISPLACEMENT = 10
+
+    val MY_PERMISSION_REQUEST_CODE = 7000
+    val PLAY_SERVICE_RES_REQUEST = 7001
 
     lateinit var drivers: DatabaseReference
     lateinit var geoFire: GeoFire
@@ -65,6 +72,58 @@ class Welcome : AppCompatActivity(), OnMapReadyCallback, GoogleApiClient.Connect
                 Snackbar.make(mapFragment.view!!, "You're offline", Snackbar.LENGTH_SHORT).show()
             }
         }
+
+        //Geo Fire
+        drivers = FirebaseDatabase.getInstance().getReference("Drivers")
+        geoFire = GeoFire(drivers)
+        setupLocation()
+    }
+
+    private fun setupLocation() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
+            && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            //Request runtime permission
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION,Manifest.permission.ACCESS_FINE_LOCATION), MY_PERMISSION_REQUEST_CODE)
+        } else {
+            if  (checkPlayService()) {
+                buildGoogleApiClient()
+                createLocationRequest()
+                if (locationSwitch.isChecked)
+                    displayLocation()
+            }
+        }
+    }
+
+    private fun createLocationRequest() {
+        mLocationRequest = LocationRequest()
+        mLocationRequest.interval = UPATE_INTERVAL.toLong()
+        mLocationRequest.fastestInterval = FATEST_INTERVAL.toLong()
+        mLocationRequest.priority = LocationRequest.PRIORITY_HIGH_ACCURACY
+        mLocationRequest.smallestDisplacement = DISPLACEMENT.toFloat()
+    }
+
+    private fun buildGoogleApiClient() {
+        mGoogleApiClient = GoogleApiClient.Builder(this)
+            .addConnectionCallbacks(this)
+            .addOnConnectionFailedListener(this)
+            .addApi(LocationServices.API)
+            .build()
+    }
+
+    private fun checkPlayService(): Boolean {
+        val resultCode = GooglePlayServicesUtil.isGooglePlayServicesAvailable(this)
+        if (resultCode != ConnectionResult.SUCCESS) {
+            if (GooglePlayServicesUtil.isUserRecoverableError(resultCode)) {
+                GooglePlayServicesUtil.getErrorDialog(resultCode, this, PLAY_SERVICE_RES_REQUEST).show()
+            } else {
+                Toast.makeText(this, "This device is not supported", Toast.LENGTH_SHORT).show()
+                finish()
+            }
+
+            return false
+        }
+
+        return true
     }
 
     private fun displayLocation() {
@@ -81,7 +140,7 @@ class Welcome : AppCompatActivity(), OnMapReadyCallback, GoogleApiClient.Connect
                 //update to Firebase
                 geoFire.setLocation(FirebaseAuth.getInstance().currentUser?.uid, GeoLocation(latitude,longitude), GeoFire.CompletionListener { key, error ->
                     if (mCurrent != null) {
-                        mCurrent.remove()// Remove already marker
+                        mCurrent!!.remove()// Remove already marker
                         mCurrent = mMap.addMarker(MarkerOptions()
                             .icon(BitmapDescriptorFactory.fromResource(R.drawable.car))
                             .position(LatLng(latitude, longitude))
@@ -96,11 +155,28 @@ class Welcome : AppCompatActivity(), OnMapReadyCallback, GoogleApiClient.Connect
                     }
                 })
             }
+        } else {
+            Log.d("Error", "Can not get your Location")
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        when(requestCode) {
+            MY_PERMISSION_REQUEST_CODE -> {
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    if  (checkPlayService()) {
+                        buildGoogleApiClient()
+                        createLocationRequest()
+                        if (locationSwitch.isChecked)
+                            displayLocation()
+                    }
+                }
+            }
         }
     }
 
     private fun rotateMarker(mCurrent: Marker?, i: Int, mMap: GoogleMap) {
-        var handler = Handler()
+        val handler = Handler()
         val start = SystemClock.uptimeMillis()
         val startRotation = mCurrent?.rotation
 
@@ -170,23 +246,11 @@ class Welcome : AppCompatActivity(), OnMapReadyCallback, GoogleApiClient.Connect
     }
 
     override fun onConnectionFailed(p0: ConnectionResult) {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+
     }
 
     override fun onLocationChanged(location: Location?) {
         mLastLocation = location!!
 
-    }
-
-    override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
-    }
-
-    override fun onProviderEnabled(provider: String?) {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
-    }
-
-    override fun onProviderDisabled(provider: String?) {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
 }

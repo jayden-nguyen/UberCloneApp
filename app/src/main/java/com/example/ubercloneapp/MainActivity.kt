@@ -78,7 +78,7 @@ class MainActivity : AppCompatActivity() {
                 mAuth.signInWithEmailAndPassword(edtEmail.text.toString(), edtPassword.text.toString())
                     .addOnSuccessListener {
                         waitingDialog.dismiss()
-                        startActivity(Intent(this@MainActivity, WelcomeActivity::class.java))
+                        startActivity(Intent(this@MainActivity, Welcome::class.java))
                         finish()
                     }
                     .addOnFailureListener {

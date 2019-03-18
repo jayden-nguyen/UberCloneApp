@@ -28,7 +28,7 @@
                     app:icon_release="@drawable/ic_location_off"
                     app:icon_press="@drawable/ic_location_on"
                     app:base_release_color="@color/baseReleaseColor"
-                    app:press_color="@color/basePressColor"
+                    app:base_press_color="@color/basePressColor"
                     app:ball_release_color="@color/ballReleaseColor"
                     app:ball_press_color="@android:color/white"
                     />
