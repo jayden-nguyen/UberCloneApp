@@ -12,21 +12,27 @@
             android:orientation="horizontal"
             android:id="@+id/layout_panel"
             >
-        <EditText
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:id="@+id/edtPlace"
-                android:hint="Enter Pickup Location"
-                android:layout_margin="10dp"
-                android:layout_weight="5"
+        <!--<EditText-->
+                <!--android:layout_width="0dp"-->
+                <!--android:layout_height="wrap_content"-->
+                <!--android:id="@+id/edtPlace"-->
+                <!--android:hint="Enter Pickup Location"-->
+                <!--android:layout_margin="10dp"-->
+                <!--android:layout_weight="5"-->
+                <!--/>-->
+        <fragment android:id="@+id/autocomplete_fragment"
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:name="com.google.android.libraries.places.widget.AutocompleteSupportFragment"
                 />
-        <Button
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:text="GO"
-                android:layout_weight="1"
-                android:id="@+id/btnGo"
-                />
+        <!--<Button-->
+                <!--android:layout_width="0dp"-->
+                <!--android:layout_height="wrap_content"-->
+                <!--android:layout_marginTop="10dp"-->
+                <!--android:text="GO"-->
+                <!--android:layout_weight="1"-->
+                <!--android:id="@+id/btnGo"-->
+                <!--/>-->
     </LinearLayout>
     <fragment
             android:layout_below="@id/layout_panel"

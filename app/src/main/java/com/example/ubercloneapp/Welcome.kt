@@ -1,51 +1,49 @@
 package com.example.ubercloneapp
 
 import android.Manifest
-import android.animation.Animator
 import android.animation.ValueAnimator
 import android.content.pm.PackageManager
 import android.graphics.Color
-import android.icu.lang.UCharacter.getDirection
 import android.location.Location
-import android.location.LocationListener
-import android.support.v7.app.AppCompatActivity
 import android.os.Bundle
 import android.os.Handler
 import android.os.SystemClock
 import android.support.design.widget.Snackbar
 import android.support.v4.app.ActivityCompat
+import android.support.v7.app.AppCompatActivity
 import android.util.Log
 import android.view.animation.LinearInterpolator
-import android.widget.Button
-import android.widget.EditText
 import android.widget.Toast
 import com.example.ubercloneapp.common.Common
 import com.example.ubercloneapp.remote.IGoogleApi
 import com.firebase.geofire.GeoFire
 import com.firebase.geofire.GeoLocation
-import com.github.glomadrian.materialanimatedswitch.MaterialAnimatedSwitch
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GooglePlayServicesUtil
 import com.google.android.gms.common.api.GoogleApiClient
+import com.google.android.gms.common.api.Status
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationServices
-
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.*
+import com.google.android.libraries.places.api.Places
+import com.google.android.libraries.places.api.model.Place
+import com.google.android.libraries.places.api.net.PlacesClient
+import com.google.android.libraries.places.widget.AutocompleteSupportFragment
+import com.google.android.libraries.places.widget.listener.PlaceSelectionListener
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.core.SyncTree
 import kotlinx.android.synthetic.main.activity_welcome2.*
 import org.json.JSONObject
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
-import java.lang.Exception
+import java.util.*
 
 class Welcome : AppCompatActivity(), OnMapReadyCallback, GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener, com.google.android.gms.location.LocationListener{
 
@@ -78,8 +76,6 @@ class Welcome : AppCompatActivity(), OnMapReadyCallback, GoogleApiClient.Connect
     private lateinit var currentPosition: LatLng
     var index = 0
     var next = 0
-    private lateinit var btnGo: Button
-    private lateinit var edtPlace: EditText
     private var destination = ""
     private lateinit var polylineOptions: PolylineOptions
     private lateinit var blackPolylineOptions: PolylineOptions
@@ -88,6 +84,9 @@ class Welcome : AppCompatActivity(), OnMapReadyCallback, GoogleApiClient.Connect
     private lateinit var carMarker: Marker
 
     private var mService: IGoogleApi? = null
+
+    private lateinit var place: AutocompleteSupportFragment
+    private lateinit var placesClient: PlacesClient
 
     var drawPathRunnable = object: Runnable{
         override fun run() {
@@ -117,8 +116,26 @@ class Welcome : AppCompatActivity(), OnMapReadyCallback, GoogleApiClient.Connect
                 }
             })
             valueAnimator.start()
-            handler.postDelayed(this, 3000)
+            if (index < polyLineList.size - 1) {
+                handler.postDelayed(this, 3000)
+            }
         }
+    }
+
+    private fun getBearing(startPosition: LatLng, endPosition: LatLng): Float {
+        var lat = Math.abs(startPosition.latitude - endPosition.latitude)
+        var lng = Math.abs(startPosition.longitude - endPosition.longitude)
+
+        if (startPosition.latitude < endPosition.latitude && startPosition.longitude < endPosition.longitude)
+            return (Math.toDegrees(Math.atan(lng/lat))).toFloat()
+        else if (startPosition.latitude >= endPosition.latitude && startPosition.longitude < endPosition.longitude)
+            return ((90 - Math.toDegrees(Math.atan(lng/lat))) + 90).toFloat()
+        else if (startPosition.latitude >= endPosition.latitude && startPosition.longitude >= endPosition.longitude)
+            return (Math.toDegrees(Math.atan(lng/lat)) + 180).toFloat()
+        else if (startPosition.latitude < endPosition.latitude && startPosition.longitude >= endPosition.longitude)
+            return ((90 - Math.toDegrees(Math.atan(lng/lat))) + 270).toFloat()
+
+        return -1f
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -130,12 +147,53 @@ class Welcome : AppCompatActivity(), OnMapReadyCallback, GoogleApiClient.Connect
         mapFragment.getMapAsync(this)
         //
         polyLineList = ArrayList()
-        btnGo.setOnClickListener {
-            destination = edtPlace.text.toString()
-            destination = destination.replace(" ", "+")
-            Log.d("EDMTDEV", destination)
-            getDirection()
-        }
+        Places.initialize(applicationContext, resources.getString(R.string.google_direction_api))
+        placesClient = Places.createClient(this)
+
+
+//        place = fragmentManager.findFragmentById(R.id.place_autocomplete_fragment) as PlaceAutocompleteFragment
+//        place.setOnPlaceSelectedListener(object: PlaceSelectionListener{
+//            override fun onPlaceSelected(place: Place?) {
+//                if (locationSwitch.isChecked) {
+//                    destination = place?.address.toString()
+//                    destination = destination.replace("","+")
+//
+//                    getDirection()
+//                } else {
+//                    Toast.makeText(this@Welcome, "Please change your status to ONLINE", Toast.LENGTH_SHORT).show()
+//                }
+//            }
+//
+//            override fun onError(status: Status?) {
+//                Toast.makeText(this@Welcome, ""+status.toString(), Toast.LENGTH_SHORT).show()
+//            }
+//        })
+
+        place = supportFragmentManager.findFragmentById(R.id.autocomplete_fragment) as AutocompleteSupportFragment
+        place.setPlaceFields(Arrays.asList(Place.Field.ID, Place.Field.NAME))
+        place.setOnPlaceSelectedListener(object: PlaceSelectionListener {
+            override fun onPlaceSelected(place: Place) {
+                if (locationSwitch.isChecked) {
+                    destination = place.name.toString()
+                    destination = destination.replace(" ","+")
+
+                    getDirection()
+                } else {
+                    Toast.makeText(this@Welcome, "Please change your status to ONLINE", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            override fun onError(p0: Status) {
+                Toast.makeText(this@Welcome, ""+p0.toString(), Toast.LENGTH_SHORT).show()
+            }
+        })
+
+//        btnGo.setOnClickListener {
+//            destination = edtPlace.text.toString()
+//            destination = destination.replace(" ", "+")
+//            Log.d("EDMTDEV", destination)
+//            getDirection()
+//        }
 
         //Geo Fire
         drivers = FirebaseDatabase.getInstance().getReference("Drivers")
@@ -151,6 +209,8 @@ class Welcome : AppCompatActivity(), OnMapReadyCallback, GoogleApiClient.Connect
             } else {
                 stopLocationUpdate()
                 mCurrent?.remove()
+                mMap.clear()
+                handler.removeCallbacks(drawPathRunnable)
                 Snackbar.make(mapFragment.view!!, "You're offline", Snackbar.LENGTH_SHORT).show()
             }
         }
@@ -170,68 +230,68 @@ class Welcome : AppCompatActivity(), OnMapReadyCallback, GoogleApiClient.Connect
                 override fun onResponse(call: Call<String>, response: Response<String>) {
                     var jsonObject = JSONObject(response.body().toString())
                     var jsonArray = jsonObject.getJSONArray("routes")
-                    for (i in 0..jsonArray.length()) {
+                    for (i in 0 until jsonArray.length()) {
                         var route = jsonArray.getJSONObject(i)
                         var poly = route.getJSONObject("overview_polyline")
                         var polyline = poly.getString("points")
                         polyLineList = decodePoly(polyline)
                     }
+
+                    //Adjusting bounds
+                    var builder = LatLngBounds.Builder()
+                    for (latlng in polyLineList) {
+                        builder.include(latlng)
+                    }
+
+                    var bounds = builder.build()
+                    var mCameraUpdate = CameraUpdateFactory.newLatLngBounds(bounds, 2)
+                    mMap.animateCamera(mCameraUpdate)
+
+                    polylineOptions = PolylineOptions()
+                    polylineOptions.color(Color.GRAY)
+                    polylineOptions.width(5f)
+                    polylineOptions.startCap(SquareCap())
+                    polylineOptions.endCap(SquareCap())
+                    polylineOptions.jointType(JointType.ROUND)
+                    polylineOptions.addAll(polyLineList)
+                    greyPolyLine = mMap.addPolyline(polylineOptions)
+
+                    blackPolylineOptions = PolylineOptions()
+                    blackPolylineOptions.color(Color.BLACK)
+                    blackPolylineOptions.width(5f)
+                    blackPolylineOptions.startCap(SquareCap())
+                    blackPolylineOptions.endCap(SquareCap())
+                    blackPolylineOptions.jointType(JointType.ROUND)
+                    blackPolylineOptions.addAll(polyLineList)
+                    blackPolyLine = mMap.addPolyline(polylineOptions)
+
+                    mMap.addMarker(MarkerOptions()
+                        .position(polyLineList[polyLineList.size-1])
+                        .title("Pickup Location"))
+
+                    //Animation
+                    var polyLineAnimator = ValueAnimator.ofInt(0,100)
+                    polyLineAnimator.duration = 2000
+                    polyLineAnimator.interpolator = LinearInterpolator()
+                    polyLineAnimator.addUpdateListener(object: ValueAnimator.AnimatorUpdateListener{
+                        override fun onAnimationUpdate(animation: ValueAnimator?) {
+                            var points = greyPolyLine.points
+                            var percentValue = animation?.animatedValue as Int
+                            var size = points.size
+                            var newPoints =  (size * (percentValue/100.0f)).toInt()
+                            var p = points.subList(0, newPoints)
+                            blackPolyLine.points = p
+                        }
+                    })
+                    polyLineAnimator.start()
+                    carMarker = mMap.addMarker(MarkerOptions().position(currentPosition).flat(true).icon(BitmapDescriptorFactory.fromResource(R.drawable.car)))
+
+                    handler = Handler()
+                    index = -1
+                    next = 1
+                    handler.postDelayed(drawPathRunnable, 3000)
                 }
             })
-            //Adjusting bounds
-            var builder = LatLngBounds.Builder()
-            for (latlng in polyLineList) {
-                builder.include(latlng)
-            }
-
-            var bounds = builder.build()
-            var mCameraUpdate = CameraUpdateFactory.newLatLngBounds(bounds, 2)
-            mMap.animateCamera(mCameraUpdate)
-
-            polylineOptions = PolylineOptions()
-            polylineOptions.color(Color.GRAY)
-            polylineOptions.width(5f)
-            polylineOptions.startCap(SquareCap())
-            polylineOptions.endCap(SquareCap())
-            polylineOptions.jointType(JointType.ROUND)
-            polylineOptions.addAll(polyLineList)
-            greyPolyLine = mMap.addPolyline(polylineOptions)
-
-            blackPolylineOptions = PolylineOptions()
-            blackPolylineOptions.color(Color.BLACK)
-            blackPolylineOptions.width(5f)
-            blackPolylineOptions.startCap(SquareCap())
-            blackPolylineOptions.endCap(SquareCap())
-            blackPolylineOptions.jointType(JointType.ROUND)
-            blackPolylineOptions.addAll(polyLineList)
-            blackPolyLine = mMap.addPolyline(polylineOptions)
-
-            mMap.addMarker(MarkerOptions()
-                .position(polyLineList[polyLineList.size-1])
-                .title("Pickup Location"))
-
-            //Animation
-            var polyLineAnimator = ValueAnimator.ofInt(0,100)
-            polyLineAnimator.duration = 2000
-            polyLineAnimator.interpolator = LinearInterpolator()
-            polyLineAnimator.addUpdateListener(object: ValueAnimator.AnimatorUpdateListener{
-                override fun onAnimationUpdate(animation: ValueAnimator?) {
-                    var points = greyPolyLine.points
-                    var percentValue = animation?.animatedValue as Int
-                    var size = points.size
-                    var newPoints =  (size * (percentValue/100.0f)).toInt()
-                    var p = points.subList(0, newPoints)
-                    blackPolyLine.points = p
-                }
-            })
-            polyLineAnimator.start()
-            carMarker = mMap.addMarker(MarkerOptions().position(currentPosition).flat(true).icon(BitmapDescriptorFactory.fromResource(R.drawable.car)))
-
-            handler = Handler()
-            index = -1
-            next = 1
-            handler.post(drawPathRunnable, 3000)
-
 
         } catch (e: Exception) {
 
@@ -345,9 +405,8 @@ class Welcome : AppCompatActivity(), OnMapReadyCallback, GoogleApiClient.Connect
                             mCurrent!!.remove()// Remove already marker
                         }
                         mCurrent = mMap.addMarker(MarkerOptions()
-                            .icon(BitmapDescriptorFactory.fromResource(R.drawable.car))
                             .position(LatLng(latitude, longitude))
-                            .title("You")
+                            .title("Your Location")
                         )
 
                         //Move camera to this position
